@@ -1,0 +1,11 @@
+[package]
+name = "circuit-simulator"
+version = "0.1.0"
+authors = ["kazukiyoshida"]
+edition = "2018"
+
+[dependencies.avr-emulator]
+path = "../avr-emulator"
+
+[dependencies]
+ndarray = "0.13.0"
