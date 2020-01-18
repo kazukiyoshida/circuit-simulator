@@ -1,46 +1,61 @@
 extern crate circuit_simulator;
 extern crate avr_emulator;
-extern crate ndarray;
 
 use circuit_simulator::*;
-use ndarray::prelude::*;
 
 fn main() {
     // avr_emulator との接続チェック
     println!("|||||||||||| avr_emulator |||||||||||||");
     avr_emulator::hello();
 
-    println!("|||||||||||| circuit simulator ||||||||||||");
-    let r1 = Resistor{
-        name: "R1".to_string(),
-        r: 10,
-        nodes: [Some("N0".to_string()), Some("N1".to_string())]
-    };
+    println!("\n|||||||||||| circuit simulator ||||||||||||");
+    println!("\n>> Elements");
+
+    let r1 = Resistor::new(
+        "R1".to_string(),
+        10_f32,
+        [Some("N1".to_string()), Some("N2".to_string())]
+    );
     println!("{:?}", r1);
-    let r2 = Resistor{
-        name: "R2".to_string(),
-        r: 10,
-        nodes: [None, None]
-    };
+
+    let r2 = Resistor::new(
+        "R2".to_string(),
+        20_f32,
+        [Some("N2".to_string()), Some(GND.to_string())]
+    );
     println!("{:?}", r2);
 
+    let v = IndependentVoltageSource {
+        name: "V1".to_string(),
+        v: 10_f32,
+        nodes: [Some("N1".to_string()), Some(GND.to_string())]
+    };
+    println!("{:?}", v);
+
+    let c = IndependentCurrentSource {
+        name: "C1".to_string(),
+        i: 0.2_f32,
+        nodes: [Some("N2".to_string()), Some(GND.to_string())]
+    };
+    println!("{:?}", c);
+
+
+    println!("\n>> Circuit");
+
     let mut circuit = Circuit::new();
-    println!("{:?}", circuit);
     circuit.add(Box::new(r1));
     circuit.add(Box::new(r2));
-    println!("{:?}", circuit);
-    // println!("{:?}", r1); // borrow of moved value
+    circuit.add(Box::new(v));
+    circuit.add(Box::new(c));
 
+    println!("{:#?}", circuit);
 
-    println!("|||||||||||| ndarray ||||||||||||");
-    let a = Array::<f64, _>::zeros(3);
-    let b = Array::range(0., 9., 1.).into_shape((3, 3)).unwrap();
-    let c = arr2(&[
-        [3.0, 1.0, 1.0],
-        [1.0, 3.0, 1.0],
-        [1.0, 1.0, 3.0]
-    ]);
-    println!("{}", a);
-    println!("{}", b);
-    println!("{}", c);
+    println!(">>>>> circuit_eq_matrix\n");
+    println!("{}", circuit.circuit_eq_matrix());
+    println!(">>>>> circuit_eq_vectore\n");
+    println!("{}", circuit.circuit_eq_vector());
+    println!("{:#?}", circuit.nodes);
+    println!("{:#?}", circuit.voltage_sources);
+    circuit.solve_eq();
+
 }
