@@ -1,7 +1,8 @@
 extern crate circuit_simulator;
 extern crate avr_emulator;
 
-use circuit_simulator::*;
+use circuit_simulator::circuit::*;
+use circuit_simulator::elements::*;
 
 fn main() {
     // avr_emulator との接続チェック
@@ -49,13 +50,6 @@ fn main() {
     circuit.add(Box::new(c));
 
     println!("{:#?}", circuit);
-
-    println!(">>>>> circuit_eq_matrix\n");
-    println!("{}", circuit.circuit_eq_matrix());
-    println!(">>>>> circuit_eq_vectore\n");
-    println!("{}", circuit.circuit_eq_vector());
-    println!("{:#?}", circuit.nodes);
-    println!("{:#?}", circuit.voltage_sources);
     circuit.solve_eq();
 
 }
