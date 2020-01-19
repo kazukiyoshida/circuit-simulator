@@ -1,3 +1,4 @@
+extern crate nalgebra;
 extern crate circuit_simulator;
 extern crate avr_emulator;
 
@@ -14,7 +15,7 @@ fn main() {
 
     let r1 = Resistor::new(
         "R1".to_string(),
-        10_f32,
+        330_f32,
         [Some("N1".to_string()), Some("N2".to_string())]
     );
     println!("{:?}", r1);
@@ -28,7 +29,7 @@ fn main() {
 
     let v = IndependentVoltageSource {
         name: "V1".to_string(),
-        v: 10_f32,
+        v: 5_f32,
         nodes: [Some("N1".to_string()), Some(GND.to_string())]
     };
     println!("{:?}", v);
@@ -40,16 +41,24 @@ fn main() {
     };
     println!("{:?}", c);
 
+    let d = Diode::new(
+        "Diode1".to_string(),
+        [Some("N2".to_string()), Some(GND.to_string())]
+    );
+    println!("{:?}", d);
 
     println!("\n>> Circuit");
 
     let mut circuit = Circuit::new();
     circuit.add(Box::new(r1));
-    circuit.add(Box::new(r2));
+    // circuit.add(Box::new(r2));
     circuit.add(Box::new(v));
-    circuit.add(Box::new(c));
+    // circuit.add(Box::new(c));
+    circuit.add(Box::new(d));
 
-    println!("{:#?}", circuit);
-    circuit.solve_eq();
-
+    println!("{:#?}", &circuit);
+    let v = circuit.solve_eq();
+    if let Some(v) = v {
+        println!("{}", v);
+    }
 }

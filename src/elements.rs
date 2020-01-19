@@ -1,6 +1,5 @@
 extern crate nalgebra;
 
-use std::collections::BTreeSet;
 use nalgebra::base::{DMatrix, DVector};
 use super::circuit::*;
 
@@ -96,10 +95,48 @@ impl Element for Resistor {
 // }
 
 // ダイオード
+//
 #[derive(Debug)]
 pub struct Diode {
     pub name: String,
     pub nodes: [Node; 2],
+
+    // モデル用パラメータ
+    pub v_thr: f32,
+    pub g_d: f32,
+}
+
+impl Diode {
+    pub fn new(name: String, nodes: [Node; 2]) -> Diode {
+        Diode {
+            name: name,
+            nodes: nodes,
+            v_thr: 0.674_f32,
+            g_d: 0.191_f32,
+        }
+    }
+
+    // 順方向電圧 Vd における電流 I(Vd) を以下の式でモデリングする.
+    // ※ 指数関数でモデリングするとNewton法で値が発散するため区分線形近似する.
+    //
+    // I(Vd) = 0             ( Vd <= Vthr )
+    //       = Gd(Vd - Vthr) ( Vd <= Vthr )
+    //
+    pub fn i(&self, vd: f32) -> f32 {
+        if vd <= self.v_thr {
+            0f32
+        } else {
+            self.g_d * ( vd - self.v_thr )
+        }
+    }
+
+    pub fn di_dv(&self, vd: f32) -> f32 {
+        if vd <= self.v_thr {
+            0f32
+        } else {
+            self.g_d
+        }
+    }
 }
 
 impl Element for Diode {
@@ -109,6 +146,37 @@ impl Element for Diode {
 
     fn nodes(&self) -> Vec<&Node> {
         vec![&self.nodes[0], &self.nodes[1]]
+    }
+
+    fn stamp_m(
+        &self,
+        m: &mut DMatrix<f32>,
+        circuit: &Circuit,
+        state: &DVector<f32>
+    ) {
+        // 自分のノード
+        let n0 = self.nodes[0].as_ref().unwrap();
+        let n1 = self.nodes[1].as_ref().unwrap();
+
+        // 回路のノードを参照して行列のインデックスを決定
+        let i0 = circuit.node_index(n0);
+        let i1 = circuit.node_index(n1);
+
+        let didv = self.di_dv(state[0]);
+
+        if let (Some(i0_), Some(i1_)) = (i0, i1) {
+            m[(i0_, i0_)] += didv;
+            m[(i1_, i1_)] += didv;
+            m[(i0_, i1_)] -= didv;
+            m[(i1_, i0_)] -= didv;
+        } else {
+            if let Some(i) = i0 {
+                m[(i, i)] += didv;
+            }
+            if let Some(i) = i1 {
+                m[(i, i)] += didv;
+            }
+        }
     }
 }
 
