@@ -32,6 +32,8 @@ Rust コードを WebAssembly にコンパイルし、npm モジュールを作�
 wasm-pack build --scope kazukiyoshida
 ```
 
+cf. ![Rust から WebAssembly にコンパイルする](https://developer.mozilla.org/ja/docs/WebAssembly/Rust_to_wasm)
+
 #### 2. Verdaccio の起動
 
 回路シミュレータはプライベートレジストリに公開するので、verdaccio を立ち上げておきます。
