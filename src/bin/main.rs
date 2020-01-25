@@ -6,11 +6,6 @@ use circuit_simulator::circuit::*;
 use circuit_simulator::elements::*;
 
 fn main() {
-    // avr_emulator との接続チェック
-    println!("|||||||||||| avr_emulator |||||||||||||");
-    avr_emulator::hello();
-
-    println!("\n|||||||||||| circuit simulator ||||||||||||");
     println!("\n>> Elements");
 
     let r1 = Resistor::new(

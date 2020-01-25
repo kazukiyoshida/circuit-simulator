@@ -5,7 +5,8 @@ authors = ["kazukiyoshida"]
 edition = "2018"
 
 [lib]
-crate-type = ["cdylib"]
+path = "src/lib.rs"
+name = "circuit_simulator"
 
 [dependencies.avr-emulator]
 path = "../avr-emulator"
