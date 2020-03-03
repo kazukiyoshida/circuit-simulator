@@ -2,6 +2,9 @@ extern crate wasm_bindgen;
 
 use wasm_bindgen::prelude::*;
 
+#[macro_use]
+extern crate downcast_rs;
+
 pub mod circuit;
 pub mod elements;
 

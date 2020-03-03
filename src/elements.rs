@@ -1,11 +1,13 @@
 extern crate nalgebra;
 
+use downcast_rs::DowncastSync;
+
 use nalgebra::base::{DMatrix, DVector};
 use super::circuit::*;
 
 
 // 回路素子トレイト
-pub trait Element: std::fmt::Debug {
+pub trait Element: std::fmt::Debug + DowncastSync {
     fn name(&self) -> &String;
     fn nodes(&self) -> Vec<&Node>;
 
@@ -24,6 +26,8 @@ pub trait Element: std::fmt::Debug {
 
     fn is_voltage_source(&self) -> bool { false }
 }
+
+impl_downcast!(sync Element);
 
 
 // 抵抗（抵抗値 (Ω)）
@@ -120,7 +124,7 @@ impl Diode {
     // ※ 指数関数でモデリングするとNewton法で値が発散するため区分線形近似する.
     //
     // I(Vd) = 0             ( Vd <= Vthr )
-    //       = Gd(Vd - Vthr) ( Vd <= Vthr )
+    //       = Gd(Vd - Vthr) ( Vd > Vthr )
     //
     pub fn i(&self, vd: f32) -> f32 {
         if vd <= self.v_thr {
