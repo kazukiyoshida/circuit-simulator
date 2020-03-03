@@ -14,8 +14,8 @@ pub const SAMPLE_FILE_NAME: &str = "hex/atmel_studio/led_flashing_fast/led_flash
 pub enum Element {
   Resistor,
   Diode,
-  IndependentVoltageSource,
-  IndependentCurrentSource,
+  IndVoltageSrc,
+  IndCurrentSrc,
 }
 
 #[wasm_bindgen]
@@ -46,7 +46,7 @@ impl CircuitController {
         // let ten_millis = time::Duration::from_millis(100);
 
         // 回路の作成
-        let v = IndependentVoltageSource {
+        let v = IndVoltageSrc {
             name: "V".to_string(),
             v: 5_f32,
             nodes: [Some("N1".to_string()), Some(GND.to_string())]
@@ -92,11 +92,11 @@ impl CircuitController {
 
             if last_pinb != portb.pinx() {
                 if bit(portb.pinx(), 5) {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndependentVoltageSource>() {
+                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
                         source.v = 5f32;
                     }
                 } else {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndependentVoltageSource>() {
+                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
                         source.v = 0f32;
                     }
                 }

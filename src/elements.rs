@@ -1,36 +1,25 @@
-extern crate nalgebra;
-
-use downcast_rs::DowncastSync;
-
-use nalgebra::base::{DMatrix, DVector};
 use super::circuit::*;
+use downcast_rs::DowncastSync;
+use nalgebra::base::{DMatrix, DVector};
 
-
-// 回路素子トレイト
 pub trait Element: std::fmt::Debug + DowncastSync {
     fn name(&self) -> &String;
     fn nodes(&self) -> Vec<&Node>;
 
-    fn stamp_m(
-        &self,
-        _matrix: &mut DMatrix<f32>,
-        _circuit: &Circuit,
-        _state: &DVector<f32>
-    ) {}
+    fn stamp_m(&self, _matrix: &mut DMatrix<f32>, _circuit: &Circuit, _state: &DVector<f32>) {}
 
-    fn stamp_v(
-        &self,
-        _vector: &mut DVector<f32>,
-        _circuit: &Circuit
-    ) {}
+    fn stamp_v(&self, _vector: &mut DVector<f32>, _circuit: &Circuit) {}
 
-    fn is_voltage_source(&self) -> bool { false }
+    fn is_voltage_source(&self) -> bool {
+        false
+    }
 }
 
 impl_downcast!(sync Element);
 
+// ============================================================================
+// Registor
 
-// 抵抗（抵抗値 (Ω)）
 #[derive(Debug)]
 pub struct Resistor {
     pub name: String,
@@ -48,7 +37,9 @@ impl Resistor {
         }
     }
 
-    fn g(&self) -> f32 { 1_f32/self.r }
+    fn g(&self) -> f32 {
+        1_f32 / self.r
+    }
 }
 
 impl Element for Resistor {
@@ -85,21 +76,9 @@ impl Element for Resistor {
     }
 }
 
-// // キャパシタ（容量値 (F)）
-// #[derive(Debug)]
-// pub struct Capacitor {
-//     pub name: String,
-//     pub f: f32,
-// }
-//
-// impl Element for Capacitor {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
+// ============================================================================
+// Diode
 
-// ダイオード
-//
 #[derive(Debug)]
 pub struct Diode {
     pub name: String,
@@ -130,7 +109,7 @@ impl Diode {
         if vd <= self.v_thr {
             0f32
         } else {
-            self.g_d * ( vd - self.v_thr )
+            self.g_d * (vd - self.v_thr)
         }
     }
 
@@ -152,12 +131,7 @@ impl Element for Diode {
         vec![&self.nodes[0], &self.nodes[1]]
     }
 
-    fn stamp_m(
-        &self,
-        m: &mut DMatrix<f32>,
-        circuit: &Circuit,
-        state: &DVector<f32>
-    ) {
+    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, state: &DVector<f32>) {
         // 自分のノード
         let n0 = self.nodes[0].as_ref().unwrap();
         let n1 = self.nodes[1].as_ref().unwrap();
@@ -184,39 +158,17 @@ impl Element for Diode {
     }
 }
 
-// // バイポーラ接合型トランジスタ
-// #[derive(Debug)]
-// pub struct BJT {
-//     pub name: String,
-// }
-//
-// impl Element for BJT {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
-//
-// // MOS 型電界効果トランジスタ
-// #[derive(Debug)]
-// pub struct MOSFET {
-//     pub name: String,
-// }
-//
-// impl Element for MOSFET {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
+// ============================================================================
+// IndependentVoltageSource
 
-// 独立電圧源（電圧値(V)）
 #[derive(Debug)]
-pub struct IndependentVoltageSource {
+pub struct IndVoltageSrc {
     pub name: String,
     pub v: f32,
     pub nodes: [Node; 2],
 }
 
-impl Element for IndependentVoltageSource {
+impl Element for IndVoltageSrc {
     fn name(&self) -> &String {
         &self.name
     }
@@ -225,12 +177,7 @@ impl Element for IndependentVoltageSource {
         vec![&self.nodes[0], &self.nodes[1]]
     }
 
-    fn stamp_m(
-        &self,
-        m: &mut DMatrix<f32>,
-        circuit: &Circuit,
-        _: &DVector<f32>,
-    ) {
+    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, _: &DVector<f32>) {
         // 自分のノード
         let n0 = self.nodes[0].as_ref().unwrap();
         let n1 = self.nodes[1].as_ref().unwrap();
@@ -264,18 +211,22 @@ impl Element for IndependentVoltageSource {
         vec[iv] = self.v;
     }
 
-    fn is_voltage_source(&self) -> bool { true }
+    fn is_voltage_source(&self) -> bool {
+        true
+    }
 }
 
-// 独立電流源（電流値(A)）
+// ============================================================================
+// IndependentCurrentSource
+
 #[derive(Debug)]
-pub struct IndependentCurrentSource {
+pub struct IndCurrentSrc {
     pub name: String,
     pub i: f32,
     pub nodes: [Node; 2],
 }
 
-impl Element for IndependentCurrentSource {
+impl Element for IndCurrentSrc {
     fn name(&self) -> &String {
         &self.name
     }
@@ -301,4 +252,3 @@ impl Element for IndependentCurrentSource {
         }
     }
 }
-

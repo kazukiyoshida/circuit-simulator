@@ -2,7 +2,7 @@
 
 # Circuit Simulator
 
-Rust で記述する電子回路シミュレータです.  
+Rust で記述する電子回路シミュレータです.
 WebAssembly 対応しており、npm モジュールとして使用できます.
 
 ## Description
