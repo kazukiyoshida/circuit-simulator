@@ -1,11 +1,26 @@
 use super::elements::*;
 use super::solver::*;
+use nalgebra::base::DVector;
 use std::collections::BTreeSet;
-use nalgebra::base::{DVector};
-
-pub type Node = Option<String>;
 
 pub const GND: &str = "GND";
+
+#[derive(Debug)]
+pub struct Node(pub Option<String>);
+
+impl Node {
+    pub fn new(name: &str) -> Node {
+        Node(Some(name.to_string()))
+    }
+
+    pub fn empty() -> Node {
+        Node(None)
+    }
+
+    pub fn gnd() -> Node {
+        Node(Some(GND.to_string()))
+    }
+}
 
 #[derive(Debug)]
 pub struct Circuit {
@@ -36,7 +51,7 @@ impl Circuit {
     pub fn add(&mut self, e: Box<dyn Element>) {
         // 各素子で宣言された Node を回路にも追加 ( "GND" は追加しない )
         for node in e.nodes() {
-            if let Some(s) = node {
+            if let Some(s) = &node.0 {
                 if s != GND {
                     self.nodes.insert(s.clone());
                 }
