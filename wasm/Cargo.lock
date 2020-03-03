@@ -73,6 +73,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "circuit-simulator-wasm"
+version = "0.1.0"
+dependencies = [
+ "avr-emulator 0.1.0",
+ "circuit-simulator 0.1.0",
+ "downcast-rs 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasm-bindgen 0.2.58 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "colored"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

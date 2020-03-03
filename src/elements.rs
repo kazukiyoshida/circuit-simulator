@@ -1,32 +1,22 @@
-extern crate nalgebra;
-
-use nalgebra::base::{DMatrix, DVector};
 use super::circuit::*;
+use downcast_rs::DowncastSync;
+use nalgebra::base::{DMatrix, DVector};
 
-
-// 回路素子トレイト
-pub trait Element: std::fmt::Debug {
+pub trait Element: std::fmt::Debug + DowncastSync {
     fn name(&self) -> &String;
     fn nodes(&self) -> Vec<&Node>;
-
-    fn stamp_m(
-        &self,
-        _matrix: &mut DMatrix<f32>,
-        _circuit: &Circuit,
-        _state: &DVector<f32>
-    ) {}
-
-    fn stamp_v(
-        &self,
-        _vector: &mut DVector<f32>,
-        _circuit: &Circuit
-    ) {}
-
-    fn is_voltage_source(&self) -> bool { false }
+    fn stamp_m(&self, _matrix: &mut DMatrix<f32>, _circuit: &Circuit, _state: &DVector<f32>) {}
+    fn stamp_v(&self, _vector: &mut DVector<f32>, _circuit: &Circuit) {}
+    fn is_voltage_source(&self) -> bool {
+        false
+    }
 }
 
+impl_downcast!(sync Element);
 
-// 抵抗（抵抗値 (Ω)）
+// ============================================================================
+// Registor
+
 #[derive(Debug)]
 pub struct Resistor {
     pub name: String,
@@ -35,16 +25,18 @@ pub struct Resistor {
 }
 
 impl Resistor {
-    pub fn new(name: String, r: f32, nodes: [Node; 2]) -> Resistor {
+    pub fn new(name: &str, r: f32, nodes: [Node; 2]) -> Resistor {
         assert!(r > 0_f32);
         Resistor {
-            name: name,
+            name: name.to_string(),
             r: r,
             nodes: nodes,
         }
     }
 
-    fn g(&self) -> f32 { 1_f32/self.r }
+    fn g(&self) -> f32 {
+        1_f32 / self.r
+    }
 }
 
 impl Element for Resistor {
@@ -58,8 +50,8 @@ impl Element for Resistor {
 
     fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, _: &DVector<f32>) {
         // 自分のノード
-        let n0 = self.nodes[0].as_ref().unwrap();
-        let n1 = self.nodes[1].as_ref().unwrap();
+        let n0 = self.nodes[0].0.as_ref().unwrap();
+        let n1 = self.nodes[1].0.as_ref().unwrap();
 
         // 回路のノードを参照して行列のインデックスを決定
         let i0 = circuit.node_index(n0);
@@ -81,21 +73,9 @@ impl Element for Resistor {
     }
 }
 
-// // キャパシタ（容量値 (F)）
-// #[derive(Debug)]
-// pub struct Capacitor {
-//     pub name: String,
-//     pub f: f32,
-// }
-//
-// impl Element for Capacitor {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
+// ============================================================================
+// Diode
 
-// ダイオード
-//
 #[derive(Debug)]
 pub struct Diode {
     pub name: String,
@@ -107,9 +87,9 @@ pub struct Diode {
 }
 
 impl Diode {
-    pub fn new(name: String, nodes: [Node; 2]) -> Diode {
+    pub fn new(name: &str, nodes: [Node; 2]) -> Diode {
         Diode {
-            name: name,
+            name: name.to_string(),
             nodes: nodes,
             v_thr: 0.674_f32,
             g_d: 0.191_f32,
@@ -120,13 +100,13 @@ impl Diode {
     // ※ 指数関数でモデリングするとNewton法で値が発散するため区分線形近似する.
     //
     // I(Vd) = 0             ( Vd <= Vthr )
-    //       = Gd(Vd - Vthr) ( Vd <= Vthr )
+    //       = Gd(Vd - Vthr) ( Vd > Vthr )
     //
     pub fn i(&self, vd: f32) -> f32 {
         if vd <= self.v_thr {
             0f32
         } else {
-            self.g_d * ( vd - self.v_thr )
+            self.g_d * (vd - self.v_thr)
         }
     }
 
@@ -148,15 +128,10 @@ impl Element for Diode {
         vec![&self.nodes[0], &self.nodes[1]]
     }
 
-    fn stamp_m(
-        &self,
-        m: &mut DMatrix<f32>,
-        circuit: &Circuit,
-        state: &DVector<f32>
-    ) {
+    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, state: &DVector<f32>) {
         // 自分のノード
-        let n0 = self.nodes[0].as_ref().unwrap();
-        let n1 = self.nodes[1].as_ref().unwrap();
+        let n0 = self.nodes[0].0.as_ref().unwrap();
+        let n1 = self.nodes[1].0.as_ref().unwrap();
 
         // 回路のノードを参照して行列のインデックスを決定
         let i0 = circuit.node_index(n0);
@@ -180,39 +155,17 @@ impl Element for Diode {
     }
 }
 
-// // バイポーラ接合型トランジスタ
-// #[derive(Debug)]
-// pub struct BJT {
-//     pub name: String,
-// }
-//
-// impl Element for BJT {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
-//
-// // MOS 型電界効果トランジスタ
-// #[derive(Debug)]
-// pub struct MOSFET {
-//     pub name: String,
-// }
-//
-// impl Element for MOSFET {
-//     fn nodes(&self) -> Vec<&Node> {
-//         vec![]
-//     }
-// }
+// ============================================================================
+// IndependentVoltageSource
 
-// 独立電圧源（電圧値(V)）
 #[derive(Debug)]
-pub struct IndependentVoltageSource {
+pub struct IndVoltageSrc {
     pub name: String,
     pub v: f32,
     pub nodes: [Node; 2],
 }
 
-impl Element for IndependentVoltageSource {
+impl Element for IndVoltageSrc {
     fn name(&self) -> &String {
         &self.name
     }
@@ -221,15 +174,10 @@ impl Element for IndependentVoltageSource {
         vec![&self.nodes[0], &self.nodes[1]]
     }
 
-    fn stamp_m(
-        &self,
-        m: &mut DMatrix<f32>,
-        circuit: &Circuit,
-        _: &DVector<f32>,
-    ) {
+    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, _: &DVector<f32>) {
         // 自分のノード
-        let n0 = self.nodes[0].as_ref().unwrap();
-        let n1 = self.nodes[1].as_ref().unwrap();
+        let n0 = self.nodes[0].0.as_ref().unwrap();
+        let n1 = self.nodes[1].0.as_ref().unwrap();
 
         // 回路のノード・電圧源を参照して行列のインデックスを決定
         let i0 = circuit.node_index(n0);
@@ -260,18 +208,32 @@ impl Element for IndependentVoltageSource {
         vec[iv] = self.v;
     }
 
-    fn is_voltage_source(&self) -> bool { true }
+    fn is_voltage_source(&self) -> bool {
+        true
+    }
 }
 
-// 独立電流源（電流値(A)）
+impl IndVoltageSrc {
+    pub fn new(name: &str, v: f32, nodes: [Node; 2]) -> IndVoltageSrc {
+        IndVoltageSrc {
+            name: name.to_string(),
+            v: v,
+            nodes: nodes,
+        }
+    }
+}
+
+// ============================================================================
+// IndependentCurrentSource
+
 #[derive(Debug)]
-pub struct IndependentCurrentSource {
+pub struct IndCurrentSrc {
     pub name: String,
     pub i: f32,
     pub nodes: [Node; 2],
 }
 
-impl Element for IndependentCurrentSource {
+impl Element for IndCurrentSrc {
     fn name(&self) -> &String {
         &self.name
     }
@@ -282,8 +244,8 @@ impl Element for IndependentCurrentSource {
 
     fn stamp_v(&self, vec: &mut DVector<f32>, circuit: &Circuit) {
         // 自分のノード
-        let n0 = self.nodes[0].as_ref().unwrap();
-        let n1 = self.nodes[1].as_ref().unwrap();
+        let n0 = self.nodes[0].0.as_ref().unwrap();
+        let n1 = self.nodes[1].0.as_ref().unwrap();
 
         // 回路のノードを参照して行列のインデックスを決定
         let i0 = circuit.node_index(n0);
@@ -298,3 +260,12 @@ impl Element for IndependentCurrentSource {
     }
 }
 
+impl IndCurrentSrc {
+    pub fn new(name: &str, i: f32, nodes: [Node; 2]) -> IndCurrentSrc {
+        IndCurrentSrc {
+            name: name.to_string(),
+            i: i,
+            nodes: nodes,
+        }
+    }
+}
