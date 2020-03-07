@@ -22,7 +22,14 @@ macro_rules! console_log {
 
 #[wasm_bindgen(start)]
 pub fn initialize() {
+    set_panic_hook();
     sample_console_log();
+}
+
+// エラー時により詳細なスタックトレースを表示
+pub fn set_panic_hook() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
 }
 
 fn sample_console_log() {
