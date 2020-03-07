@@ -11,6 +11,27 @@ use avr_emulator::avr::*;
 pub const SAMPLE_FILE_NAME: &str = "hex/atmel_studio/led_flashing_fast/led_flashing.hex";
 
 #[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
+
+macro_rules! console_log {
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
+
+#[wasm_bindgen(start)]
+pub fn initialize() {
+    sample_console_log();
+}
+
+fn sample_console_log() {
+    console_log!("Hello {}!", "world");
+    console_log!("Let's print some numbers...");
+    console_log!("1 + 3 = {}", 1 + 3);
+}
+
+#[wasm_bindgen]
 pub enum Element {
   Resistor,
   Diode,
