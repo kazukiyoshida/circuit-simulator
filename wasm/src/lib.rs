@@ -35,73 +35,59 @@ pub enum Element {
 }
 
 #[wasm_bindgen]
-pub struct CircuitController {
-    circuit: Circuit,
+pub fn exec(hex: String) {
+    scenario1(hex);
 }
 
-#[wasm_bindgen]
-impl CircuitController {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> CircuitController {
-        let c = Circuit::new();
-        CircuitController { circuit: c }
-    }
+// シナリオ1: 5V 電源 - 抵抗 - LED - GND の定常回路
+fn scenario1(hex: String) {
+    // Setup circuit
+    let mut circuit = Circuit::new();
+    let v = IndVoltageSrc::new("V", 5f32, [Node::new("N1"), Node::gnd()]);
+    let r = Resistor::new("R", 330f32, [Node::new("N1"), Node::new("N2")]);
+    let d = Diode::new("LED", [Node::new("N2"), Node::gnd()]);
+    circuit.add(Box::new(v));
+    circuit.add(Box::new(r));
+    circuit.add(Box::new(d));
 
-    pub fn exec(&mut self, hex: String) {
-        self.scenario1(hex);
-    }
-}
+    // Setup CPU
+    let avr = ATmega328P::new();
+    let mut timer0 = avr.new_timer0();
+    let mut timer1 = avr.new_timer1();
+    let mut timer2 = avr.new_timer2();
+    let mut portb = avr.new_portb();
+    let mut portc = avr.new_portc();
+    let mut portd = avr.new_portd();
+    let logger = Logger::new();
 
-impl CircuitController {
-    // シナリオ1: 5V 電源 - 抵抗 - LED - GND の定常回路
-    pub fn scenario1(&mut self, hex: String) {
-        // Setup circuit
-        let v = IndVoltageSrc::new("V", 5f32, [Node::new("N1"), Node::gnd()]);
-        let r = Resistor::new("R", 330f32, [Node::new("N1"), Node::new("N2")]);
-        let d = Diode::new("LED", [Node::new("N2"), Node::gnd()]);
-        self.circuit.add(Box::new(v));
-        self.circuit.add(Box::new(r));
-        self.circuit.add(Box::new(d));
+    avr.load_hex_from_string(hex);
+    avr.initialize_sram();
 
-        // Setup CPU
-        let avr = ATmega328P::new();
-        let mut timer0 = avr.new_timer0();
-        let mut timer1 = avr.new_timer1();
-        let mut timer2 = avr.new_timer2();
-        let mut portb = avr.new_portb();
-        let mut portc = avr.new_portc();
-        let mut portd = avr.new_portd();
-        let logger = Logger::new();
+    let mut last_pinb = 0;
 
-        avr.load_hex_from_string(hex);
-        avr.initialize_sram();
+    // CPU start
+    loop {
+        avr.execute();
+        timer0.clk_io();
+        timer1.clk_io();
+        timer2.clk_io();
+        portb.clk_io();
+        portc.clk_io();
+        portd.clk_io();
 
-        let mut last_pinb = 0;
-
-        // CPU start
-        loop {
-            avr.execute();
-            timer0.clk_io();
-            timer1.clk_io();
-            timer2.clk_io();
-            portb.clk_io();
-            portc.clk_io();
-            portd.clk_io();
-
-            if last_pinb != portb.pinx() {
-                if bit(portb.pinx(), 5) {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
-                        source.v = 5f32;
-                    }
-                    console_log!("ON");
-                } else {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
-                        source.v = 0f32;
-                    }
-                    console_log!("OFF");
+        if last_pinb != portb.pinx() {
+            if bit(portb.pinx(), 5) {
+                if let Some(source) = circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
+                    source.v = 5f32;
                 }
-                last_pinb = portb.pinx();
+                console_log!("ON");
+            } else {
+                if let Some(source) = circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
+                    source.v = 0f32;
+                }
+                console_log!("OFF");
             }
+            last_pinb = portb.pinx();
         }
     }
 }
