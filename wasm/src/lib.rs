@@ -1,14 +1,9 @@
-#[macro_use]
-extern crate downcast_rs;
-use downcast_rs::DowncastSync;
-
-use wasm_bindgen::prelude::*;
-use circuit_simulator::circuit::*;
-use circuit_simulator::elements::*;
 use avr_emulator::atmega328p::*;
 use avr_emulator::avr::*;
-
-pub const SAMPLE_FILE_NAME: &str = "hex/atmel_studio/led_flashing_fast/led_flashing.hex";
+use avr_emulator::logger::*;
+use circuit_simulator::circuit::*;
+use circuit_simulator::elements::*;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
@@ -23,7 +18,6 @@ macro_rules! console_log {
 #[wasm_bindgen(start)]
 pub fn initialize() {
     set_panic_hook();
-    sample_console_log();
 }
 
 // エラー時により詳細なスタックトレースを表示
@@ -32,127 +26,72 @@ pub fn set_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
-fn sample_console_log() {
-    console_log!("Hello {}!", "world");
-    console_log!("Let's print some numbers...");
-    console_log!("1 + 3 = {}", 1 + 3);
-}
-
 #[wasm_bindgen]
 pub enum Element {
-  Resistor,
-  Diode,
-  IndVoltageSrc,
-  IndCurrentSrc,
+    Resistor,
+    Diode,
+    IndVoltageSrc,
+    IndCurrentSrc,
 }
 
 #[wasm_bindgen]
-pub struct CircuitController {
-    circuit: Circuit,
+pub fn exec(hex: String) {
+    scenario1(hex);
 }
 
-#[wasm_bindgen]
-impl CircuitController {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> CircuitController {
-        let c = Circuit::new();
-        CircuitController {
-            circuit: c,
-        }
-    }
+// シナリオ1: 5V 電源 - 抵抗 - LED - GND の定常回路
+fn scenario1(hex: String) {
+    // Setup circuit
+    let mut circuit = Circuit::new();
+    let v = IndVoltageSrc::new("V", 5f32, [Node::new("N1"), Node::gnd()]);
+    let r = Resistor::new("R", 330f32, [Node::new("N1"), Node::new("N2")]);
+    let d = Diode::new("LED", [Node::new("N2"), Node::gnd()]);
+    circuit.add(Box::new(v));
+    circuit.add(Box::new(r));
+    circuit.add(Box::new(d));
 
-    pub fn exec_test(&mut self) {
-        self.scenario1();
-    }
-}
+    // Setup CPU
+    let avr = ATmega328P::new();
+    let mut timer0 = avr.new_timer0();
+    let mut timer1 = avr.new_timer1();
+    let mut timer2 = avr.new_timer2();
+    let mut portb = avr.new_portb();
+    let mut portc = avr.new_portc();
+    let mut portd = avr.new_portd();
+    let logger = Logger::new();
 
-impl CircuitController {
+    avr.load_hex_from_string(hex);
+    avr.initialize_sram();
 
-    // シナリオテスト1.
-    // 5V 電源 - 抵抗 - LED - GND の定常回路
-    pub fn scenario1(&mut self) {
-        // let ten_millis = time::Duration::from_millis(100);
+    let mut last_pinb = 0;
 
-        // 回路の作成
-        let v = IndVoltageSrc {
-            name: "V".to_string(),
-            v: 5_f32,
-            nodes: [Some("N1".to_string()), Some(GND.to_string())]
-        };
-        let r = Resistor::new(
-            "R".to_string(),
-            330_f32,
-            [Some("N1".to_string()), Some("N2".to_string())]
-        );
-        let d = Diode::new(
-            "LED".to_string(),
-            [Some("N2".to_string()), Some(GND.to_string())]
-        );
-        self.circuit.add(Box::new(v));
-        self.circuit.add(Box::new(r));
-        self.circuit.add(Box::new(d));
+    // CPU start
+    loop {
+        avr.execute();
+        timer0.clk_io();
+        timer1.clk_io();
+        timer2.clk_io();
+        portb.clk_io();
+        portc.clk_io();
+        portd.clk_io();
 
-        println!("|||||||||||||||||||");
-        // CPU の準備
-        let avr = ATmega328P::new();
-
-        let mut timer0 = avr.new_timer0();
-        let mut timer1 = avr.new_timer1();
-        let mut timer2 = avr.new_timer2();
-        let mut portb = avr.new_portb();
-        let mut portc = avr.new_portc();
-        let mut portd = avr.new_portd();
-
-        avr.load_hex(SAMPLE_FILE_NAME);
-        avr.initialize_sram();
-
-        let mut last_pinb = 0;
-
-        // CPU 起動
-        loop {
-            avr.execute();
-            timer0.clk_io();
-            timer1.clk_io();
-            timer2.clk_io();
-            portb.clk_io();
-            portc.clk_io();
-            portd.clk_io();
-
-            if last_pinb != portb.pinx() {
-                if bit(portb.pinx(), 5) {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
-                        source.v = 5f32;
-                    }
-                } else {
-                    if let Some(source) = self.circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
-                        source.v = 0f32;
-                    }
+        if last_pinb != portb.pinx() {
+            if bit(portb.pinx(), 5) {
+                if let Some(source) = circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
+                    source.v = 5f32;
                 }
-
-                println!("-----------------------------------");
-                println!("{:?}", self.circuit);
-
-                // IndVoltageSrc
-
-
-                last_pinb = portb.pinx()
+                console_log!("ON");
+            } else {
+                if let Some(source) = circuit.elements[0].downcast_mut::<IndVoltageSrc>() {
+                    source.v = 0f32;
+                }
+                console_log!("OFF");
             }
-
-            // if avr.cycle() % 1000 == 0 {
-            //     println!("cycle = {:10}    PORTB = {}", avr.cycle(), portb,);
-            // }
+            last_pinb = portb.pinx();
         }
     }
-
 }
 
-#[test]
-fn test_scenario1() {
-    let mut c = CircuitController::new();
-    c.scenario1();
-}
-
-pub fn bit(a: u8, n: u8) -> bool {
+fn bit(a: u8, n: u8) -> bool {
     ((a & 1 << n) >> n) == 1
 }
-
