@@ -1,7 +1,5 @@
 use downcast_rs::DowncastSync;
 use nalgebra::base::{DMatrix, DVector};
-use std::cell::RefCell;
-use std::rc::Rc;
 
 // 各要素の参照関係
 // Element 1 : N Pin M : 1 Node
@@ -37,7 +35,7 @@ pub trait Element: std::fmt::Debug + DowncastSync {
 
 #[derive(Debug)]
 pub struct Registor {
-    pins: [Option<NodeId>; 2],
+    pins: [NodeId; 2],
     resistance: f32,
 }
 
@@ -45,7 +43,7 @@ impl Registor {
     pub fn new(registance: f32) -> Registor {
         let r = if registance == 0.0 { 0.01 } else { registance };
         Registor {
-            pins: [None, None],
+            pins: [0, 0],
             resistance: r,
         }
     }
@@ -57,24 +55,28 @@ impl Registor {
 
 impl Element for Registor {
     fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
-        self.pins[pin_id] = Some(node_id);
+        self.pins[pin_id] = node_id;
     }
 
     fn stamp_matrix(&self, matrix: &mut DMatrix<f32>, _: &DVector<f32>) {
-        // shift 1 for GND ...
-        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize));
-        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize));
-        match [p0, p1] {
-            [Some(p0), Some(p1)] => {
+        match self.pins {
+            [p0, 0] => {
+                let p0 = p0 - 1;
+                matrix[(p0, p0)] += self.conductance();
+            }
+            [0, p1] => {
+                let p1 = p1 - 1;
+                matrix[(p1, p1)] += self.conductance();
+            }
+            [p0, p1] => {
+                let p0 = p0 - 1;
+                let p1 = p1 - 1;
                 matrix[(p0, p0)] += self.conductance();
                 matrix[(p1, p1)] += self.conductance();
                 matrix[(p0, p1)] -= self.conductance();
                 matrix[(p1, p0)] -= self.conductance();
             }
-            [Some(p0), None] => matrix[(p0, p0)] += self.conductance(),
-            [None, Some(p1)] => matrix[(p1, p1)] += self.conductance(),
-            [None, None] => {}
-        };
+        }
     }
 }
 
@@ -86,7 +88,7 @@ impl Element for Registor {
 pub struct Diode {
     // pins[0] : Anode
     // pins[1] : Cathode
-    pins: [Option<NodeId>; 2],
+    pins: [NodeId; 2],
     threshold: f32,
     grad: f32,
 }
@@ -94,7 +96,7 @@ pub struct Diode {
 impl Diode {
     pub fn new() -> Diode {
         Diode {
-            pins: [None, None],
+            pins: [0, 0],
             threshold: 0.674,
             grad: 0.191,
         }
@@ -119,66 +121,65 @@ impl Diode {
 
 impl Element for Diode {
     fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
-        self.pins[pin_id] = Some(node_id);
+        self.pins[pin_id] = node_id;
     }
 
     // cf. https://spicesharp.github.io/SpiceSharp/articles/custom_components/modified_nodal_analysis.html
-    fn stamp_vector(&self, rhs_vec: &mut DVector<f32>, state: &DVector<f32>) {
-        // shift 1 for GND ...
-        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize)); // anode
-        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize)); // cathode
-
-        match [p0, p1] {
-            [Some(p0), Some(p1)] => {
-                // let didv = self.d_current(state[p0] - state[p1]);
-                // println!("##### state[p0]  : {}", state[p0]);
-                // println!("##### state[p1]  : {}", state[p1]);
-                // println!("##### d_current  : {}", didv);
-                // matrix[(p0, p0)] += didv;
-                // matrix[(p1, p1)] += didv;
-                // matrix[(p0, p1)] -= didv;
-                // matrix[(p1, p0)] -= didv;
+    fn stamp_vector(&self, rhs_vec: &mut DVector<f32>, _: &DVector<f32>) {
+        let g = self.threshold * self.grad;
+        match self.pins {
+            [p0, 0] => {
+                let p0 = p0 - 1;
+                rhs_vec[p0] += g;
             }
-            [Some(p0), None] => {
-                if state[p0] >= self.threshold {
-                    rhs_vec[p0] += self.threshold * self.grad;
-                }
+            [0, p1] => {
+                let p1 = p1 - 1;
+                rhs_vec[p1] -= g;
             }
-            [None, _] => {}
-        };
+            [p0, p1] => {
+                let p0 = p0 - 1;
+                let p1 = p1 - 1;
+                rhs_vec[p0] += g;
+                rhs_vec[p1] -= g;
+            }
+        }
     }
 
     fn stamp_matrix(&self, matrix: &mut DMatrix<f32>, state: &DVector<f32>) {
-        // shift 1 for GND ...
-        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize)); // anode
-        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize)); // cathode
-        match [p0, p1] {
-            [Some(p0), Some(p1)] => {
-                let didv = self.d_current(state[p0] - state[p1]);
-                matrix[(p0, p0)] += didv;
-                matrix[(p1, p1)] += didv;
-                matrix[(p0, p1)] -= didv;
-                matrix[(p1, p0)] -= didv;
-            }
-            [Some(p0), None] => {
+        match self.pins {
+            [p0, 0] => {
+                let p0 = p0 - 1;
                 let didv = self.d_current(state[p0]);
                 matrix[(p0, p0)] += didv;
             }
-            [None, _] => {}
-        };
+            [0, p1] => {
+                let p1 = p1 - 1;
+                let didv = self.d_current(state[p1]);
+                matrix[(p1, p1)] += didv;
+            }
+            [p0, p1] => {
+                let p0 = p0 - 1;
+                let p1 = p1 - 1;
+                let didv = self.d_current(state[p0] - state[p1]);
+                matrix[(p0, p1)] -= didv;
+                matrix[(p1, p0)] -= didv;
+                matrix[(p0, p0)] += didv;
+                matrix[(p1, p1)] += didv;
+            }
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct IndVoltageSrc {
-    pins: [Option<NodeId>; 2],
+    pins: [NodeId; 2],
     voltage: f32,
 }
 
 impl IndVoltageSrc {
     pub fn new(volt: f32) -> IndVoltageSrc {
         IndVoltageSrc {
-            pins: [None, None],
+            pins: [0, 0],
             voltage: volt,
         }
     }
@@ -186,7 +187,7 @@ impl IndVoltageSrc {
 
 impl Element for IndVoltageSrc {
     fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
-        self.pins[pin_id] = Some(node_id);
+        self.pins[pin_id] = node_id;
     }
 
     fn is_voltage_src(&self) -> bool {
@@ -198,25 +199,25 @@ impl Element for IndVoltageSrc {
     }
 
     fn stamp_matrix_by_src(&self, matrix: &mut DMatrix<f32>, index: usize) {
-        // shift 1 for GND ...
-        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize));
-        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize));
-        match [p0, p1] {
-            [Some(p0), Some(p1)] => {
+        match self.pins {
+            [p0, 0] => {
+                let p0 = p0 - 1;
+                matrix[(p0, index)] = 1.0;
+                matrix[(index, p0)] = 1.0;
+            }
+            [0, p1] => {
+                let p1 = p1 - 1;
+                matrix[(p1, index)] = -1.0;
+                matrix[(index, p1)] = -1.0;
+            }
+            [p0, p1] => {
+                let p0 = p0 - 1;
+                let p1 = p1 - 1;
                 matrix[(p0, index)] = 1.0;
                 matrix[(p1, index)] = -1.0;
                 matrix[(index, p0)] = 1.0;
                 matrix[(index, p1)] = -1.0;
             }
-            [Some(p0), None] => {
-                matrix[(p0, index)] = 1.0;
-                matrix[(index, p0)] = 1.0;
-            }
-            [None, Some(p1)] => {
-                matrix[(p1, index)] = 1.0;
-                matrix[(index, p1)] = 1.0;
-            }
-            [None, None] => {}
-        };
+        }
     }
 }
