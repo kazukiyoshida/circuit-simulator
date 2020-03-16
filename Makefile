@@ -20,7 +20,3 @@ fmt:
 .PHONY: test
 test:
 	$(CARGO) test -- --nocapture
-
-.PHONY: sample
-sample:
-	$(CARGO) run --example sample;

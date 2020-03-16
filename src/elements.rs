@@ -1,271 +1,222 @@
-use super::circuit::*;
 use downcast_rs::DowncastSync;
 use nalgebra::base::{DMatrix, DVector};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+// 各要素の参照関係
+// Element 1 : N Pin M : 1 Node
+
+// Node への参照
+type NodeId = usize;
 
 pub trait Element: std::fmt::Debug + DowncastSync {
-    fn name(&self) -> &String;
-    fn nodes(&self) -> Vec<&Node>;
-    fn stamp_m(&self, _matrix: &mut DMatrix<f32>, _circuit: &Circuit, _state: &DVector<f32>) {}
-    fn stamp_v(&self, _vector: &mut DVector<f32>, _circuit: &Circuit) {}
-    fn is_voltage_source(&self) -> bool {
+    // Element の pin を Node＿に繋げる
+    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize);
+
+    // その要素が電圧源であるか
+    fn is_voltage_src(&self) -> bool {
         false
     }
+    // その要素が電流源であるか
+    fn is_current_src(&self) -> bool {
+        false
+    }
+    // その要素が電流/電圧源であるか
+    fn is_voltage_or_current_src(&self) -> bool {
+        self.is_voltage_src() || self.is_current_src()
+    }
+
+    // 修正節点法における回路の方程式の行列へのスタンプ
+    fn stamp_matrix(&self, _: &mut DMatrix<f32>, _: &DVector<f32>) {}
+    fn stamp_matrix_by_src(&self, _: &mut DMatrix<f32>, _: usize) {}
+
+    // 修正節点法における回路の方程式のベクトルへのスタンプ
+    fn stamp_vector(&self, _: &mut DVector<f32>, _: &DVector<f32>) {}
+    fn stamp_vector_by_src(&self, _: &mut DVector<f32>, _: usize) {}
 }
-
-impl_downcast!(sync Element);
-
-// ============================================================================
-// Registor
 
 #[derive(Debug)]
-pub struct Resistor {
-    pub name: String,
-    pub r: f32,
-    pub nodes: [Node; 2],
+pub struct Registor {
+    pins: [Option<NodeId>; 2],
+    resistance: f32,
 }
 
-impl Resistor {
-    pub fn new(name: &str, r: f32, nodes: [Node; 2]) -> Resistor {
-        assert!(r > 0_f32);
-        Resistor {
-            name: name.to_string(),
-            r: r,
-            nodes: nodes,
+impl Registor {
+    pub fn new(registance: f32) -> Registor {
+        let r = if registance == 0.0 { 0.01 } else { registance };
+        Registor {
+            pins: [None, None],
+            resistance: r,
         }
     }
 
-    fn g(&self) -> f32 {
-        1_f32 / self.r
+    pub fn conductance(&self) -> f32 {
+        1.0 / self.resistance
     }
 }
 
-impl Element for Resistor {
-    fn name(&self) -> &String {
-        &self.name
+impl Element for Registor {
+    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
+        self.pins[pin_id] = Some(node_id);
     }
 
-    fn nodes(&self) -> Vec<&Node> {
-        vec![&self.nodes[0], &self.nodes[1]]
-    }
-
-    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, _: &DVector<f32>) {
-        // 自分のノード
-        let n0 = self.nodes[0].0.as_ref().unwrap();
-        let n1 = self.nodes[1].0.as_ref().unwrap();
-
-        // 回路のノードを参照して行列のインデックスを決定
-        let i0 = circuit.node_index(n0);
-        let i1 = circuit.node_index(n1);
-
-        if let (Some(i0_), Some(i1_)) = (i0, i1) {
-            m[(i0_, i0_)] += self.g();
-            m[(i1_, i1_)] += self.g();
-            m[(i0_, i1_)] -= self.g();
-            m[(i1_, i0_)] -= self.g();
-        } else {
-            if let Some(i) = i0 {
-                m[(i, i)] += self.g();
+    fn stamp_matrix(&self, matrix: &mut DMatrix<f32>, _: &DVector<f32>) {
+        // shift 1 for GND ...
+        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize));
+        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize));
+        match [p0, p1] {
+            [Some(p0), Some(p1)] => {
+                matrix[(p0, p0)] += self.conductance();
+                matrix[(p1, p1)] += self.conductance();
+                matrix[(p0, p1)] -= self.conductance();
+                matrix[(p1, p0)] -= self.conductance();
             }
-            if let Some(i) = i1 {
-                m[(i, i)] += self.g();
-            }
-        }
+            [Some(p0), None] => matrix[(p0, p0)] += self.conductance(),
+            [None, Some(p1)] => matrix[(p1, p1)] += self.conductance(),
+            [None, None] => {}
+        };
     }
 }
 
-// ============================================================================
-// Diode
-
+// ダイオード
+// 順方向電圧 Vd における電流 I(Vd) を区分線形近似でモデリングする.
+// I(V) = 0                      ( Vd <= threshold )
+//      = grad * (V - threshold) ( Vd  > threshold )
 #[derive(Debug)]
 pub struct Diode {
-    pub name: String,
-    pub nodes: [Node; 2],
-
-    // モデル用パラメータ
-    pub v_thr: f32,
-    pub g_d: f32,
+    // pins[0] : Anode
+    // pins[1] : Cathode
+    pins: [Option<NodeId>; 2],
+    threshold: f32,
+    grad: f32,
 }
 
 impl Diode {
-    pub fn new(name: &str, nodes: [Node; 2]) -> Diode {
+    pub fn new() -> Diode {
         Diode {
-            name: name.to_string(),
-            nodes: nodes,
-            v_thr: 0.674_f32,
-            g_d: 0.191_f32,
+            pins: [None, None],
+            threshold: 0.674,
+            grad: 0.191,
         }
     }
 
-    // 順方向電圧 Vd における電流 I(Vd) を以下の式でモデリングする.
-    // ※ 指数関数でモデリングするとNewton法で値が発散するため区分線形近似する.
-    //
-    // I(Vd) = 0             ( Vd <= Vthr )
-    //       = Gd(Vd - Vthr) ( Vd > Vthr )
-    //
-    pub fn i(&self, vd: f32) -> f32 {
-        if vd <= self.v_thr {
-            0f32
+    pub fn current(&self, volt: f32) -> f32 {
+        if volt <= self.threshold {
+            0.0
         } else {
-            self.g_d * (vd - self.v_thr)
+            self.grad * (volt - self.threshold)
         }
     }
 
-    pub fn di_dv(&self, vd: f32) -> f32 {
-        if vd <= self.v_thr {
-            0f32
+    pub fn d_current(&self, volt: f32) -> f32 {
+        if volt <= self.threshold {
+            0.0
         } else {
-            self.g_d
+            self.grad
         }
     }
 }
 
 impl Element for Diode {
-    fn name(&self) -> &String {
-        &self.name
+    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
+        self.pins[pin_id] = Some(node_id);
     }
 
-    fn nodes(&self) -> Vec<&Node> {
-        vec![&self.nodes[0], &self.nodes[1]]
+    // cf. https://spicesharp.github.io/SpiceSharp/articles/custom_components/modified_nodal_analysis.html
+    fn stamp_vector(&self, rhs_vec: &mut DVector<f32>, state: &DVector<f32>) {
+        // shift 1 for GND ...
+        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize)); // anode
+        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize)); // cathode
+
+        match [p0, p1] {
+            [Some(p0), Some(p1)] => {
+                // let didv = self.d_current(state[p0] - state[p1]);
+                // println!("##### state[p0]  : {}", state[p0]);
+                // println!("##### state[p1]  : {}", state[p1]);
+                // println!("##### d_current  : {}", didv);
+                // matrix[(p0, p0)] += didv;
+                // matrix[(p1, p1)] += didv;
+                // matrix[(p0, p1)] -= didv;
+                // matrix[(p1, p0)] -= didv;
+            }
+            [Some(p0), None] => {
+                if state[p0] >= self.threshold {
+                    rhs_vec[p0] += self.threshold * self.grad;
+                }
+            }
+            [None, _] => {}
+        };
     }
 
-    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, state: &DVector<f32>) {
-        // 自分のノード
-        let n0 = self.nodes[0].0.as_ref().unwrap();
-        let n1 = self.nodes[1].0.as_ref().unwrap();
-
-        // 回路のノードを参照して行列のインデックスを決定
-        let i0 = circuit.node_index(n0);
-        let i1 = circuit.node_index(n1);
-
-        let didv = self.di_dv(state[0]);
-
-        if let (Some(i0_), Some(i1_)) = (i0, i1) {
-            m[(i0_, i0_)] += didv;
-            m[(i1_, i1_)] += didv;
-            m[(i0_, i1_)] -= didv;
-            m[(i1_, i0_)] -= didv;
-        } else {
-            if let Some(i) = i0 {
-                m[(i, i)] += didv;
+    fn stamp_matrix(&self, matrix: &mut DMatrix<f32>, state: &DVector<f32>) {
+        // shift 1 for GND ...
+        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize)); // anode
+        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize)); // cathode
+        match [p0, p1] {
+            [Some(p0), Some(p1)] => {
+                let didv = self.d_current(state[p0] - state[p1]);
+                matrix[(p0, p0)] += didv;
+                matrix[(p1, p1)] += didv;
+                matrix[(p0, p1)] -= didv;
+                matrix[(p1, p0)] -= didv;
             }
-            if let Some(i) = i1 {
-                m[(i, i)] += didv;
+            [Some(p0), None] => {
+                let didv = self.d_current(state[p0]);
+                matrix[(p0, p0)] += didv;
             }
-        }
+            [None, _] => {}
+        };
     }
 }
-
-// ============================================================================
-// IndependentVoltageSource
 
 #[derive(Debug)]
 pub struct IndVoltageSrc {
-    pub name: String,
-    pub v: f32,
-    pub nodes: [Node; 2],
-}
-
-impl Element for IndVoltageSrc {
-    fn name(&self) -> &String {
-        &self.name
-    }
-
-    fn nodes(&self) -> Vec<&Node> {
-        vec![&self.nodes[0], &self.nodes[1]]
-    }
-
-    fn stamp_m(&self, m: &mut DMatrix<f32>, circuit: &Circuit, _: &DVector<f32>) {
-        // 自分のノード
-        let n0 = self.nodes[0].0.as_ref().unwrap();
-        let n1 = self.nodes[1].0.as_ref().unwrap();
-
-        // 回路のノード・電圧源を参照して行列のインデックスを決定
-        let i0 = circuit.node_index(n0);
-        let i1 = circuit.node_index(n1);
-        let iv = circuit.voltage_index(&self.name);
-        let iv = circuit.nodes.len() + iv;
-
-        if let (Some(i0_), Some(i1_)) = (i0, i1) {
-            m[(i0_, iv)] = 1_f32;
-            m[(i1_, iv)] = -1_f32;
-            m[(iv, i0_)] = 1_f32;
-            m[(iv, i1_)] = -1_f32;
-        } else {
-            if let Some(i) = i0 {
-                m[(i, iv)] = 1_f32;
-                m[(iv, i)] = 1_f32;
-            }
-            if let Some(i) = i1 {
-                m[(i, iv)] = 1_f32;
-                m[(iv, i)] = 1_f32;
-            }
-        }
-    }
-
-    fn stamp_v(&self, vec: &mut DVector<f32>, circuit: &Circuit) {
-        let iv = circuit.voltage_index(&self.name);
-        let iv = circuit.nodes.len() + iv;
-        vec[iv] = self.v;
-    }
-
-    fn is_voltage_source(&self) -> bool {
-        true
-    }
+    pins: [Option<NodeId>; 2],
+    voltage: f32,
 }
 
 impl IndVoltageSrc {
-    pub fn new(name: &str, v: f32, nodes: [Node; 2]) -> IndVoltageSrc {
+    pub fn new(volt: f32) -> IndVoltageSrc {
         IndVoltageSrc {
-            name: name.to_string(),
-            v: v,
-            nodes: nodes,
+            pins: [None, None],
+            voltage: volt,
         }
     }
 }
 
-// ============================================================================
-// IndependentCurrentSource
-
-#[derive(Debug)]
-pub struct IndCurrentSrc {
-    pub name: String,
-    pub i: f32,
-    pub nodes: [Node; 2],
-}
-
-impl Element for IndCurrentSrc {
-    fn name(&self) -> &String {
-        &self.name
+impl Element for IndVoltageSrc {
+    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize) {
+        self.pins[pin_id] = Some(node_id);
     }
 
-    fn nodes(&self) -> Vec<&Node> {
-        vec![&self.nodes[0], &self.nodes[1]]
+    fn is_voltage_src(&self) -> bool {
+        true
     }
 
-    fn stamp_v(&self, vec: &mut DVector<f32>, circuit: &Circuit) {
-        // 自分のノード
-        let n0 = self.nodes[0].0.as_ref().unwrap();
-        let n1 = self.nodes[1].0.as_ref().unwrap();
-
-        // 回路のノードを参照して行列のインデックスを決定
-        let i0 = circuit.node_index(n0);
-        let i1 = circuit.node_index(n1);
-
-        if let Some(i) = i0 {
-            vec[i] += self.i;
-        }
-        if let Some(i) = i1 {
-            vec[i] -= self.i;
-        }
+    fn stamp_vector_by_src(&self, vector: &mut DVector<f32>, index: usize) {
+        vector[index] = self.voltage;
     }
-}
 
-impl IndCurrentSrc {
-    pub fn new(name: &str, i: f32, nodes: [Node; 2]) -> IndCurrentSrc {
-        IndCurrentSrc {
-            name: name.to_string(),
-            i: i,
-            nodes: nodes,
-        }
+    fn stamp_matrix_by_src(&self, matrix: &mut DMatrix<f32>, index: usize) {
+        // shift 1 for GND ...
+        let p0 = self.pins[0].and_then(|n| n.checked_sub(1usize));
+        let p1 = self.pins[1].and_then(|n| n.checked_sub(1usize));
+        match [p0, p1] {
+            [Some(p0), Some(p1)] => {
+                matrix[(p0, index)] = 1.0;
+                matrix[(p1, index)] = -1.0;
+                matrix[(index, p0)] = 1.0;
+                matrix[(index, p1)] = -1.0;
+            }
+            [Some(p0), None] => {
+                matrix[(p0, index)] = 1.0;
+                matrix[(index, p0)] = 1.0;
+            }
+            [None, Some(p1)] => {
+                matrix[(p1, index)] = 1.0;
+                matrix[(index, p1)] = 1.0;
+            }
+            [None, None] => {}
+        };
     }
 }
