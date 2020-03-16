@@ -1,5 +1,6 @@
 SHELL=/bin/bash
 CARGO = cargo
+WASMPACK = wasm-pack
 
 # Build the project in debug mode
 .PHONY: build
@@ -8,7 +9,7 @@ build:
 
 # Check the format of the source code
 .PHONY: fmt-check
-fmt:
+fmt-check:
 	cargo fmt --all -- --check
 
 # fmt fix
@@ -20,3 +21,13 @@ fmt:
 .PHONY: test
 test:
 	$(CARGO) test -- --nocapture
+
+# Wasm build
+.PHONY: wasm
+wasm:
+	$(WASMPACK) build --scope kazukiyoshida
+
+# Publis wasm package
+.PHONY: npm-publish
+npm-publish:
+	cd pkg; npm publish --registry http://localhost:4873
