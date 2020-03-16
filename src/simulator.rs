@@ -1,5 +1,4 @@
 use super::elements::*;
-use downcast_rs::DowncastSync;
 use nalgebra::base::{DMatrix, DVector};
 use std::cell::RefCell;
 use std::rc::Rc;

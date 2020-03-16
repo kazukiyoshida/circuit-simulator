@@ -1,4 +1,3 @@
-use circuit_simulator::elements::*;
 use circuit_simulator::simulator::*;
 
 #[test]
@@ -17,8 +16,6 @@ fn test_simulator_gnd_v_r_led_gnd() {
     sim.connect_pin_and_node(sim.pin_ref(eid1, 0), node0);
     sim.connect_pin_and_node(sim.pin_ref(eid1, 1), node1);
     sim.connect_pin_and_node(sim.pin_ref(eid2, 0), node1);
-    sim.connect_pin_and_gnd(sim.pin_ref(eid0, 1));
-    sim.connect_pin_and_gnd(sim.pin_ref(eid2, 1));
 
     match &sim.solve_eq() {
         Some(vector) => println!("result ... \n {}", vector),
@@ -32,11 +29,8 @@ fn test_simulator_gnd_v() {
 
     // GND - 電源 - N1  （開放）
     let eid0 = sim.add_ind_voltage_src(5.0);
-
     let node0 = sim.add_node();
-
     sim.connect_pin_and_node(sim.pin_ref(eid0, 0), node0);
-    sim.connect_pin_and_gnd(sim.pin_ref(eid0, 1));
 
     match &sim.solve_eq() {
         Some(vector) => println!("result ... \n {}", vector),
@@ -58,7 +52,6 @@ fn test_simulator_gnd_v_r() {
     sim.connect_pin_and_node(sim.pin_ref(eid0, 0), node0);
     sim.connect_pin_and_node(sim.pin_ref(eid1, 0), node0);
     sim.connect_pin_and_node(sim.pin_ref(eid1, 1), node1);
-    sim.connect_pin_and_gnd(sim.pin_ref(eid0, 1));
 
     match &sim.solve_eq() {
         Some(vector) => println!("result ... \n {}", vector),
@@ -78,8 +71,6 @@ fn test_simulator_gnd_v_r_gnd() {
 
     sim.connect_pin_and_node(sim.pin_ref(eid0, 0), node0);
     sim.connect_pin_and_node(sim.pin_ref(eid1, 0), node0);
-    sim.connect_pin_and_gnd(sim.pin_ref(eid0, 1));
-    sim.connect_pin_and_gnd(sim.pin_ref(eid1, 1));
 
     match &sim.solve_eq() {
         Some(vector) => println!("result ... \n {}", vector),
