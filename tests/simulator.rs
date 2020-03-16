@@ -1,3 +1,4 @@
+use circuit_simulator::elements::*;
 use circuit_simulator::simulator::*;
 
 #[test]
