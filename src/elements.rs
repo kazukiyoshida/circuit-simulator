@@ -1,4 +1,4 @@
-use downcast_rs::DowncastSync;
+use wasm_bindgen::prelude::*;
 use nalgebra::base::{DMatrix, DVector};
 
 // 各要素の参照関係
@@ -7,7 +7,7 @@ use nalgebra::base::{DMatrix, DVector};
 // Node への参照
 type NodeId = usize;
 
-pub trait Element: std::fmt::Debug + DowncastSync {
+pub trait Element: std::fmt::Debug {
     // Element の pin を Node＿に繋げる
     fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize);
 

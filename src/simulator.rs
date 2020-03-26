@@ -50,20 +50,24 @@ impl Simulator {
         self.nodes.len() - 1
     }
 
-    pub fn connect_pin_and_node(&mut self, pin: PinRef, node_id: usize) {
+    pub fn connect_elm_pin_node(
+        &mut self, element_id: usize, pin_id: usize, node_id: usize)
+    {
+        let pinref = PinRef::new(&self.elements[element_id], pin_id);
+        self.connect_pin_and_node(pinref, node_id)
+    }
+
+    pub fn connect_elm_pin_gnd(&mut self, element_id: usize, pin_id: usize) {
+        let pinref = PinRef::new(&self.elements[element_id], pin_id);
+        self.connect_pin_and_node(pinref, 0)
+    }
+
+    fn connect_pin_and_node(&mut self, pin: PinRef, node_id: usize) {
         // self.element と self.nodes を両方とも書き換える
         pin.element
             .borrow_mut()
             .connect_pin_to_node(pin.pin_id, node_id);
         self.nodes[node_id].push(pin);
-    }
-
-    pub fn connect_pin_and_gnd(&mut self, pin: PinRef) {
-        self.connect_pin_and_node(pin, 0)
-    }
-
-    pub fn pin_ref(&self, element_id: usize, pin_id: usize) -> PinRef {
-        PinRef::new(&self.elements[element_id], pin_id)
     }
 
     fn add_element(&mut self, element: Box<dyn Element>) -> usize {
