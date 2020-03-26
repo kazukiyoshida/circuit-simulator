@@ -1,4 +1,6 @@
 use super::simulator::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -23,13 +25,13 @@ pub fn set_panic_hook() {
 }
 
 #[wasm_bindgen]
-pub struct SimulatorController(Simulator);
+pub struct Circuit(Simulator);
 
 #[wasm_bindgen]
-impl SimulatorController {
+impl Circuit {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> SimulatorController {
-        SimulatorController(Simulator::new())
+    pub fn new() -> Circuit {
+        Circuit(Simulator::new())
     }
 
     pub fn add_registor(&mut self, r: f32) -> usize {
