@@ -1,94 +1,95 @@
 use super::elements::*;
 use nalgebra::base::{DMatrix, DVector};
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use wasm_bindgen::prelude::*;
 
 const SOLVER_ACCURACY: f32 = 0.0001;
 const SOLVER_COUNT_MAX: u32 = 100;
 
-// Element への内部可変性を伴った参照
-// メモ: Rc<dyn Element> として Element.pins: RefCell<[Option<NodeId>; 2]> とすると
-//       thread 安全性が担保できない. そのため Element 全体に内部可変性を入れる.
-type ElementRef = Rc<RefCell<Box<dyn Element>>>;
-
-// Pin への参照
-#[derive(Debug)]
-pub struct PinRef {
-    element: ElementRef,
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Link {
+    element_id: usize,
     pin_id: usize,
+    node_id: usize,
 }
 
-impl PinRef {
-    pub fn new(element: &ElementRef, pin_id: usize) -> PinRef {
-        PinRef {
-            element: Rc::clone(element),
+impl Link {
+    fn new(element_id: usize, pin_id: usize, node_id: usize) -> Link {
+        Link {
+            element_id: element_id,
             pin_id: pin_id,
+            node_id: node_id,
         }
     }
 }
 
 // シミュレーション空間の全体.
+// #[wasm_bindgen]
 pub struct Simulator {
-    // シミュレーション空間に存在する全ての回路要素を所有する
-    pub elements: Vec<ElementRef>,
-
-    // シミュレーション空間に存在する Node が結合している要素とその端子
-    // 1つの Node は複数の Pin への参照を持つ.
-    pub nodes: Vec<Vec<PinRef>>,
+    pub elements: HashMap<usize, Rc<RefCell<dyn Element>>>,
+    pub nodes: HashSet<usize>,
+    pub links: HashSet<Link>,
+    pub eq: Equation,
 }
 
+// #[wasm_bindgen]
 impl Simulator {
+    // #[wasm_bindgen(constructor)]
     pub fn new() -> Simulator {
+        let mut nodes = HashSet::new();
+        nodes.insert(0); // GND
+
         Simulator {
-            elements: vec![],
-            nodes: vec![vec![]], // node 0 is gnd
+            elements: HashMap::new(),
+            nodes: nodes,
+            links: HashSet::new(),
+            eq: Equation::new(),
         }
     }
 
     pub fn add_node(&mut self) -> usize {
-        self.nodes.push(vec![]);
-        self.nodes.len() - 1
+        let id = self.nodes.iter().max().unwrap() + 1;
+        self.nodes.insert(id);
+        id
     }
 
-    pub fn connect_elm_pin_node(
-        &mut self, element_id: usize, pin_id: usize, node_id: usize)
-    {
-        let pinref = PinRef::new(&self.elements[element_id], pin_id);
-        self.connect_pin_and_node(pinref, node_id)
-    }
-
-    pub fn connect_elm_pin_gnd(&mut self, element_id: usize, pin_id: usize) {
-        let pinref = PinRef::new(&self.elements[element_id], pin_id);
-        self.connect_pin_and_node(pinref, 0)
-    }
-
-    fn connect_pin_and_node(&mut self, pin: PinRef, node_id: usize) {
-        // self.element と self.nodes を両方とも書き換える
-        pin.element
+    pub fn connect_element_pin_node(&mut self, element_id: usize, pin_id: usize, node_id: usize) {
+        self.elements
+            .get(&element_id)
+            .unwrap()
             .borrow_mut()
-            .connect_pin_to_node(pin.pin_id, node_id);
-        self.nodes[node_id].push(pin);
+            .connect_pin_to_node(pin_id, node_id);
+        self.links.insert(Link::new(element_id, pin_id, node_id));
     }
 
-    fn add_element(&mut self, element: Box<dyn Element>) -> usize {
-        let element = Rc::new(RefCell::new(element));
-        self.elements.push(element);
-        self.elements.len() - 1
+    pub fn connect_elment_pin_gnd(&mut self, element_id: usize, pin_id: usize) {
+        self.connect_element_pin_node(element_id, pin_id, 0);
     }
 
     // ----------------------------------------------------------------
     // 電子部品を回路に登録するためのコード
 
     pub fn add_registor(&mut self, r: f32) -> usize {
-        self.add_element(Box::new(Registor::new(r)))
+        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
+        let element = Rc::new(RefCell::new(Registor::new(id, r)));
+        self.elements.insert(id, element);
+        id
     }
 
     pub fn add_diode(&mut self) -> usize {
-        self.add_element(Box::new(Diode::new()))
+        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
+        let element = Rc::new(RefCell::new(Diode::new(id)));
+        self.elements.insert(id, element);
+        id
     }
 
     pub fn add_ind_voltage_src(&mut self, v: f32) -> usize {
-        self.add_element(Box::new(IndVoltageSrc::new(v)))
+        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
+        let element = Rc::new(RefCell::new(IndVoltageSrc::new(id, v)));
+        self.elements.insert(id, element);
+        id
     }
 
     // ----------------------------------------------------------------
@@ -96,118 +97,115 @@ impl Simulator {
 
     // 回路の状態ベクトルの次元.
     // 次元 = ノードの数 + 電圧/電流源の数.
-    pub fn circuit_dim(&self) -> usize {
+    fn equation_dim(&self) -> usize {
         self.nodes.len() - 1 // don't count GND node.
             + self
                 .elements
-                .iter()
-                .filter(|elm| elm.borrow().is_voltage_src())
-                .collect::<Vec<&ElementRef>>()
-                .len()
+                .values()
+                .fold(0, |mut sum, e| {
+                    if e.borrow().is_voltage_or_current_src() {
+                        sum += 1;
+                    }
+                    sum
+                })
     }
 
-    pub fn create_vector(&self) -> DVector<f32> {
-        DVector::<f32>::zeros(self.circuit_dim())
-    }
+    // Node の追加・削除、Element の追加・削除の度に方程式も初期化する
+    fn create_equation(&mut self) {
+        let dim = self.equation_dim();
+        self.eq.a = DMatrix::<f32>::zeros(dim, dim);
+        self.eq.x = DVector::<f32>::zeros(dim);
+        self.eq.z = DVector::<f32>::zeros(dim);
 
-    pub fn create_matrix(&self) -> DMatrix<f32> {
-        let d = self.circuit_dim();
-        DMatrix::<f32>::zeros(d, d)
-    }
-
-    // 回路の方程式の左辺行列
-    // この行列は、n 回イテレーションを繰り返した回路の状態 state に依存する.
-    pub fn lhs_matrix(&self, state: &DVector<f32>) -> DMatrix<f32> {
-        let mut matrix = self.create_matrix();
-
-        for elm in self
-            .elements
-            .iter()
-            .filter(|elm| !elm.borrow().is_voltage_or_current_src())
-        {
-            elm.borrow().stamp_matrix(&mut matrix, state);
+        for (index, node_id) in self.nodes.iter().enumerate() {
+            println!("|||||  OK !! ||||");
+            self.eq.node_index.insert(*node_id, index);
         }
 
-        let offset = self.nodes.len() - 1; // don't count GND
-        for (index, elm) in self
+        for (index, (element_id, element)) in self
             .elements
             .iter()
-            .filter(|elm| elm.borrow().is_voltage_or_current_src())
+            .filter(|&(id, e)| e.borrow().is_voltage_or_current_src())
             .enumerate()
         {
-            elm.borrow()
-                .stamp_matrix_by_src(&mut matrix, index + offset);
+            println!("|||||  OK !! ||||");
+            self.eq.src_index.insert(*element_id, index);
         }
-
-        matrix
     }
 
-    // 回路の方程式の右辺ベクトル
-    pub fn rhs_vector(&self, state: &DVector<f32>) -> DVector<f32> {
-        let mut vector = self.create_vector();
-
-        for elm in self
-            .elements
-            .iter()
-            .filter(|elm| !elm.borrow().is_voltage_or_current_src())
-        {
-            elm.borrow().stamp_vector(&mut vector, state);
+    // 方程式を解くイテレーションの度にスタンプを押す
+    fn stamp_equation(&mut self) {
+        for element in self.elements.values() {
+            element.borrow().stamp(&mut self.eq);
         }
-
-        // 電圧/電流源は右辺ベクトルにスタンプを押す. そのためベクトルの index は
-        //   index = 電圧以外の要素数(offset) + 電圧/電流源で何番目
-        // という式で決定される.
-        let offset = self.nodes.len() - 1; // don't count GND
-        for (index, elm) in self
-            .elements
-            .iter()
-            .filter(|elm| elm.borrow().is_voltage_or_current_src())
-            .enumerate()
-        {
-            elm.borrow()
-                .stamp_vector_by_src(&mut vector, index + offset);
-        }
-        vector
     }
 
-    // 回路の方程式をNewton-Raphson法で解く
-    pub fn solve_eq(&self) -> Option<DVector<f32>> {
-        let mut vec = self.create_vector();
-        let mut count = 0;
-        loop {
-            let lhs_matrix = self.lhs_matrix(&vec);
-            let rhs_vector = self.rhs_vector(&vec);
-            let l2norm = (&lhs_matrix * &vec - &rhs_vector).norm();
+    // 方程式をNewton-Raphson法で解く
+    pub fn solve_eq(&mut self) -> Option<&DVector<f32>> {
+        self.create_equation();
 
-            // println!("|||||||||||||||||||||||||||||| count : {} |||||||||||||||||||||", count);
-            // println!("||||||||||||   lhs_matrix: \n{}", &lhs_matrix);
-            // println!("||||||||||||   rhs_vector: \n{}", &rhs_vector);
-            // println!("||||||||||||   vec:        \n{}", &vec);
-            // println!("||||||||||||   l2norm:       {}", l2norm);
+        println!("||| elements: {:?}", self.elements);
+        println!("||| nodes: {:?}", self.nodes);
+        println!("||| links: {:?}", self.links);
 
+        for _ in 0..SOLVER_COUNT_MAX {
+            self.stamp_equation();
+
+            println!("||| eq.a: {}", self.eq.a);
+            println!("||| eq.x: {}", self.eq.x);
+            println!("||| eq.z: {}", self.eq.z);
+            println!("||| eq.node_index: {:?}", self.eq.node_index);
+            println!("||| eq.src_index: {:?}", self.eq.src_index);
+
+            let l2norm = (&self.eq.a * &self.eq.x - &self.eq.z).norm();
+
+            // println!("||||| count : {} ||||", count);
+            // println!("A: \n{}", &self.eq.a);
+            // println!("x: \n{}", &self.eq.x);
+            // println!("z: \n{}", &self.eq.z);
+            // println!("l2:  {}", l2);
             if l2norm < SOLVER_ACCURACY {
-                return Some(vec);
-            }
-            if count > SOLVER_COUNT_MAX {
-                println!("too many iter");
-                return None;
+                return Some(&self.eq.x);
             }
 
-            match lhs_matrix.clone().try_inverse() {
-                Some(matrix_rev) => {
-                    // =>       M * (v - dv) = rhs_v
-                    // =>            v - dv  = M^-1 * rhs_v
-                    // =>   v - M^-1 * rhs_v = dv
-                    // =>                 dv = v - M^-1 * rhs_v
-                    let d_vec = &vec - (&matrix_rev * &rhs_vector);
-                    vec = vec - d_vec;
-                    count += 1;
+            match self.eq.a.clone().try_inverse() {
+                Some(a_rev) => {
+                    // A * (x - dx) = z  =>  dx = x - A^-1 * z
+                    let dx = &self.eq.x - (&a_rev * &self.eq.z);
+                    self.eq.x = &self.eq.x - &dx;
                 }
                 None => {
                     println!("could not calc inverse");
                     return None;
                 }
             }
+        }
+        println!("too many iteration");
+        return None;
+    }
+}
+
+// Ax = z
+#[derive(Debug)]
+pub struct Equation {
+    pub a: DMatrix<f32>,
+    pub x: DVector<f32>,
+    pub z: DVector<f32>,
+
+    // node_id が方程式の何段目に当たるか. node_id: index
+    pub node_index: HashMap<usize, usize>,
+    // src となっている Element の element_id が方程式の何段目に当たるか. element_id: index
+    pub src_index: HashMap<usize, usize>,
+}
+
+impl Equation {
+    fn new() -> Equation {
+        Equation {
+            a: DMatrix::<f32>::zeros(0, 0),
+            x: DVector::<f32>::zeros(0),
+            z: DVector::<f32>::zeros(0),
+            node_index: HashMap::new(),
+            src_index: HashMap::new(),
         }
     }
 }
