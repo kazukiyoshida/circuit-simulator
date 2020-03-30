@@ -25,8 +25,6 @@ impl Link {
     }
 }
 
-// シミュレーション空間の全体.
-// #[wasm_bindgen]
 pub struct Simulator {
     pub elements: BTreeMap<usize, Rc<RefCell<dyn Element>>>,
     pub nodes: BTreeSet<usize>,
@@ -34,9 +32,7 @@ pub struct Simulator {
     pub eq: Equation,
 }
 
-// #[wasm_bindgen]
 impl Simulator {
-    // #[wasm_bindgen(constructor)]
     pub fn new() -> Simulator {
         let mut nodes = BTreeSet::new();
         nodes.insert(0); // GND

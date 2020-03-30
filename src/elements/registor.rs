@@ -9,7 +9,6 @@ use wasm_bindgen::prelude::*;
 pub struct Registor {
     id: usize,
     // 結合しているノードの id. デフォルトでは GND に結合している.
-    //_この id が行列のインデックスに対応し、スタンプを押す.
     pins: [usize; 2],
     resistance: f32,
 }
