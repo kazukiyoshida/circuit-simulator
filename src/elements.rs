@@ -1,13 +1,14 @@
-use super::simulator::Equation;
+use super::simulator::*;
+use std::any::Any;
 use wasm_bindgen::prelude::*;
 
 pub trait Element: std::fmt::Debug {
-    // その要素が電流/電圧源であるか
+    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize);
+    fn stamp(&self, eq: &mut Equation);
+    fn as_any(&mut self) -> &mut dyn Any;
     fn is_voltage_or_current_src(&self) -> bool {
         false
     }
-    fn connect_pin_to_node(&mut self, pin_id: usize, node_id: usize);
-    fn stamp(&self, eq: &mut Equation);
 }
 
 #[derive(Debug)]
@@ -31,6 +32,10 @@ impl Registor {
 
     fn conductance(&self) -> f32 {
         1.0 / self.resistance
+    }
+
+    fn change_registance(&mut self, r: f32) {
+        self.resistance = r;
     }
 }
 
@@ -57,6 +62,26 @@ impl Element for Registor {
                 eq.a[(p0, p1)] -= self.conductance();
                 eq.a[(p1, p0)] -= self.conductance();
             }
+        }
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl Simulator {
+    pub fn registor_change_registance(&mut self, element_id: usize, r: f32) {
+        match self
+            .elements
+            .get(&element_id)
+            .unwrap()
+            .borrow_mut()
+            .as_any()
+            .downcast_mut::<Registor>()
+        {
+            Some(registor) => registor.resistance = r,
+            None => panic!("is not Registor"),
         }
     }
 }
@@ -138,6 +163,10 @@ impl Element for Diode {
             }
         }
     }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -190,5 +219,9 @@ impl Element for IndVoltageSrc {
                 eq.a[(index, p1)] = -1.0;
             }
         }
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
