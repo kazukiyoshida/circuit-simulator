@@ -1,4 +1,4 @@
-use super::elements::*;
+use super::elements::element::*;
 use nalgebra::base::{DMatrix, DVector};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -66,30 +66,6 @@ impl Simulator {
 
     pub fn connect_elment_pin_gnd(&mut self, element_id: usize, pin_id: usize) {
         self.connect_element_pin_node(element_id, pin_id, 0);
-    }
-
-    // ----------------------------------------------------------------
-    // 電子部品を回路に登録するためのコード
-
-    pub fn add_registor(&mut self, r: f32) -> usize {
-        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
-        let element = Rc::new(RefCell::new(Registor::new(id, r)));
-        self.elements.insert(id, element);
-        id
-    }
-
-    pub fn add_diode(&mut self) -> usize {
-        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
-        let element = Rc::new(RefCell::new(Diode::new(id)));
-        self.elements.insert(id, element);
-        id
-    }
-
-    pub fn add_ind_voltage_src(&mut self, v: f32) -> usize {
-        let id = self.elements.keys().max().unwrap_or(&0usize) + 1;
-        let element = Rc::new(RefCell::new(IndVoltageSrc::new(id, v)));
-        self.elements.insert(id, element);
-        id
     }
 
     // ----------------------------------------------------------------
