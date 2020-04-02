@@ -17,10 +17,10 @@ fn test_simulator_gnd_v_r_led_gnd() {
     sim.connect_element_pin_node(eid1, 1, node1);
     sim.connect_element_pin_node(eid2, 0, node1);
 
-    match &sim.solve_eq() {
-        Some(vector) => println!("result ... \n {}", vector),
-        None => {}
-    }
+    match sim.state() {
+        Ok(state) => println!(" state : {:?}", state),
+        Err(err) => (),
+    };
 }
 
 #[test]
@@ -32,10 +32,10 @@ fn test_simulator_gnd_v() {
     let node0 = sim.add_node();
     sim.connect_element_pin_node(eid0, 0, node0);
 
-    match &sim.solve_eq() {
-        Some(vector) => println!("result ... \n {}", vector),
-        None => {}
-    }
+    match sim.state() {
+        Ok(state) => println!(" state : {:?}", state),
+        Err(err) => (),
+    };
 }
 
 #[test]
@@ -53,10 +53,10 @@ fn test_simulator_gnd_v_r() {
     sim.connect_element_pin_node(eid1, 0, node0);
     sim.connect_element_pin_node(eid1, 1, node1);
 
-    match &sim.solve_eq() {
-        Some(vector) => println!("result ... \n {}", vector),
-        None => {}
-    }
+    match sim.state() {
+        Ok(state) => println!(" state : {:?}", state),
+        Err(err) => (),
+    };
 }
 
 #[test]
@@ -72,8 +72,8 @@ fn test_simulator_gnd_v_r_gnd() {
     sim.connect_element_pin_node(eid0, 0, node0);
     sim.connect_element_pin_node(eid1, 0, node0);
 
-    match &sim.solve_eq() {
-        Some(vector) => println!("result ... \n {}", vector),
-        None => {}
-    }
+    match sim.state() {
+        Ok(state) => println!(" state : {:?}", state),
+        Err(err) => (),
+    };
 }

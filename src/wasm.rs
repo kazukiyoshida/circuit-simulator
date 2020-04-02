@@ -11,31 +11,15 @@ impl Circuit {
         Circuit(Simulator::new())
     }
 
-    // 回路の概要
-    //   ・以下の要素をまとめたもの. この概要から一意に詳細が定まる.
-    //     ・回路素子の数や種類、内部パラメータ
-    //     ・回路素子とノードの結合状態
-
-    // 回路の詳細
-    //   ・各ノードの電圧や電流.
-
-    // アルゴリズム
-    //   MCU が存在するならば clk を進める;
-    //   回路の概要と以前のそれを比較する;
-    //     1-a. 変化がある場合 => 回路の方程式を解き、回路の詳細を得る.
-    //     1-a. 変化がない場合 => return None.
-    //   以前の回路の詳細と比較して変化があったかどうかをみる;
-    //     2-a. 変化があった場合   => return 回路の詳細.
-    //     2-b. 変化がなかった場合 => return None.
-    pub fn next(&mut self) -> String {
-        // TODO
-        // {
-        //   1: 3,
-        //   2: 2.3,
-        //   3: 0.1,
-        //   4: 0,
-        // }: Record<node_id, voltage>
+    // 回路の詳細を求める（定常状態を計算する）
+    pub fn calc(&mut self) -> String {
         "{1: 3, 2: 2.3, 3: 0.1, 4: 0}".to_string()
+    }
+
+    // 回路の詳細を求める（非定常状態を計算する）
+    pub fn next(&mut self) -> Option<String> {
+        // Record<node_id, voltage>
+        Some("{1: 3, 2: 2.3, 3: 0.1, 4: 0}".to_string())
     }
 
     //--------------------------------------------------------------------------
@@ -85,15 +69,15 @@ impl Circuit {
         self.0.add_ind_voltage_src(v)
     }
 
-    // >>>> Arduino
+    // >>>> ArduinoUno
 
-    // Arduino を作成する
-    pub fn add_arduino(&mut self) -> usize {
-        0 // TODO
+    // ArduinoUno を作成する
+    pub fn add_arduino_uno(&mut self) -> usize {
+        self.0.add_arduino_uno()
     }
 
-    // Arduino にプログラムを書き込む
-    pub fn arduino_program(&mut self, element_id: usize, hex: String) {
-        // TODO
+    // ArduinoUno にプログラムを書き込む
+    pub fn arduino_uno_program(&mut self, element_id: usize, hex: String) {
+        self.0.arduino_uno_program(element_id, hex);
     }
 }

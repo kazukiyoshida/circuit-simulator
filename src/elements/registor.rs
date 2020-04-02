@@ -1,8 +1,8 @@
-use super::element::*;
 use super::super::simulator::*;
+use super::element::*;
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::any::Any;
 use wasm_bindgen::prelude::*;
 
 #[derive(Debug)]
@@ -85,4 +85,3 @@ impl Simulator {
         }
     }
 }
-
