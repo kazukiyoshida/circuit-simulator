@@ -1,4 +1,5 @@
 use super::simulator::*;
+use serde_json::*;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -12,14 +13,23 @@ impl Circuit {
     }
 
     // 回路の詳細を求める（定常状態を計算する）
-    pub fn calc(&mut self) -> String {
-        "{1: 3, 2: 2.3, 3: 0.1, 4: 0}".to_string()
+    //   ・エラーの場合は None が返される
+    pub fn update_state(&mut self) -> Option<String> {
+        match self.0.update_state() {
+            Ok(state) => Some(serde_json::to_string(&state).unwrap()),
+            Err(err) => None,
+        }
     }
 
     // 回路の詳細を求める（非定常状態を計算する）
     pub fn next(&mut self) -> Option<String> {
-        // Record<node_id, voltage>
-        Some("{1: 3, 2: 2.3, 3: 0.1, 4: 0}".to_string())
+        match self.0.next() {
+            Ok(maybeState) => match maybeState {
+                Some(state) => Some(serde_json::to_string(&state).unwrap()),
+                None => None,
+            },
+            Err(err) => Some(format!("{:?}", err)),
+        }
     }
 
     //--------------------------------------------------------------------------

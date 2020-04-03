@@ -88,7 +88,10 @@ impl Simulator {
                 // 失敗した場合は電源を落とした状態にしてみる..
                 let mut state = BTreeMap::new();
                 for node_id in self.nodes.iter() {
-                    state.insert(*node_id, 0.0);
+                    // except GND
+                    if *node_id != 0 {
+                        state.insert(*node_id, 0.0);
+                    }
                 }
                 Ok(State::new(state))
             }
