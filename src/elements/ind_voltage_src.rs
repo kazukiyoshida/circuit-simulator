@@ -9,6 +9,7 @@ use wasm_bindgen::prelude::*;
 pub struct IndVoltageSrc {
     id: usize,
     pins: [usize; 2],
+    outputs: [bool; 2],
     voltage: f32,
 }
 
@@ -17,6 +18,7 @@ impl IndVoltageSrc {
         IndVoltageSrc {
             id: id,
             pins: [0, 0],
+            outputs: [true, false],
             voltage: volt,
         }
     }
@@ -27,12 +29,13 @@ impl Element for IndVoltageSrc {
         self.pins[pin_id] = node_id;
     }
 
-    fn is_voltage_or_current_src(&self) -> bool {
-        true
+    fn output_pins(&self) -> Vec<bool> {
+        self.outputs.to_vec()
     }
 
     fn stamp(&self, eq: &mut Equation) {
-        let index = eq.src_index.get(&self.id).unwrap() + eq.node_index.len();
+        // 出力ピンは 0 だけ
+        let index = eq.src_index.get(&(self.id, 0)).unwrap() + eq.node_index.len();
         eq.z[index] = self.voltage;
 
         match self.pins {
