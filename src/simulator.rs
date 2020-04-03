@@ -1,5 +1,7 @@
 use super::elements::element::*;
 use nalgebra::base::{DMatrix, DVector};
+use serde::ser::SerializeMap;
+use serde::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -26,7 +28,7 @@ pub struct Simulator {
     //   ・回路の構成が更新される度に状態は削除され、計算待ちの状態になる.
     //   ・MCU のクロックを連続で処理して変化がある場合だけ出力する、という
     //     仕組みを作るために、以前の state を内部的に保持する必要がある.
-    pub state: Option<BTreeMap<NodeId, f32>>,
+    pub state: Option<State>,
 }
 
 impl Simulator {
@@ -69,7 +71,7 @@ impl Simulator {
     }
 
     // 回路の状態
-    fn state(&mut self) -> Result<BTreeMap<NodeId, f32>, String> {
+    fn state(&mut self) -> Result<State, String> {
         match self.solve_eq() {
             Ok(eq) => {
                 let mut state = BTreeMap::new();
@@ -80,7 +82,7 @@ impl Simulator {
                         state.insert(*node_id, eq.x[*index]);
                     }
                 }
-                Ok(state)
+                Ok(State::new(state))
             }
             Err(err) => {
                 // 失敗した場合は電源を落とした状態にしてみる..
@@ -88,13 +90,13 @@ impl Simulator {
                 for node_id in self.nodes.iter() {
                     state.insert(*node_id, 0.0);
                 }
-                Ok(state)
+                Ok(State::new(state))
             }
         }
     }
 
     // 回路の状態を求める（定常状態を計算する）
-    pub fn update_state(&mut self) -> Result<BTreeMap<NodeId, f32>, String> {
+    pub fn update_state(&mut self) -> Result<State, String> {
         match self.state() {
             Ok(state) => {
                 self.state = Some(state.clone());
@@ -106,7 +108,7 @@ impl Simulator {
 
     // 回路の状態を求める（非定常状態を計算する）
     //   MCU のクロックを進め、以前の状態から変化がある場合にだけ更新後の状態を返す.
-    pub fn next(&mut self) -> Result<Option<BTreeMap<NodeId, f32>>, String> {
+    pub fn next(&mut self) -> Result<Option<State>, String> {
         // 状態があらかじめ計算されていないと変化を検出できない.
         if self.state.is_none() {
             return Err("no state calculated".to_string());
@@ -152,6 +154,29 @@ impl Link {
             pin_id: pin_id,
             node_id: node_id,
         }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct State(BTreeMap<NodeId, f32>);
+
+impl State {
+    pub fn new(map: BTreeMap<NodeId, f32>) -> State {
+        State(map)
+    }
+}
+
+// cf. https://stackoverflow.com/questions/51276896/how-do-i-use-serde-to-serialize-a-hashmap-with-structs-as-keys-to-json
+impl Serialize for State {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (k, v) in &self.0 {
+            map.serialize_entry(&k.to_string(), &v)?;
+        }
+        map.end()
     }
 }
 
