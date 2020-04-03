@@ -1,4 +1,5 @@
 use circuit_simulator::simulator::*;
+use serde_json::*;
 use std::fs;
 
 #[test]
@@ -106,7 +107,10 @@ fn test_simulator_arduinouno() {
     loop {
         match sim.next() {
             Ok(maybeState) => match maybeState {
-                Some(state) => println!("||| state : {:?}", state),
+                Some(state) => {
+                    let json = serde_json::to_string(&state).unwrap();
+                    println!("||| state : {}", json);
+                }
                 None => (),
             },
             Err(err) => println!("||| err : {}", err),
